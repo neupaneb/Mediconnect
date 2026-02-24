@@ -1,17 +1,56 @@
 # MediConnect
 
-A hospital-style patient portal with ticketing, AI-assisted appointment scheduling, and lab results.
+MediConnect is a hospital-style patient portal built with Flask (backend) and React (frontend).The goal of this project is to simulate a real-world healthcare management system with authentication, role-based access, and modular feature development.
+
+---
+
+## ✅ Completed
+
+- User registration
+- User login & logout
+- JWT-based authentication
+- Role-based access (Patient / Staff)
+- Protected frontend routes
+- Basic dashboard UI
+
+---
+
+## 🚧 In Progress
+
+- Appointment booking system
+- Lab results management
+- Ticketing system
+- AI-assisted scheduling
+- Analytics dashboard
+
+---
+
+## Tech Stack
+
+**Backend**
+
+- Flask
+- SQLAlchemy
+- JWT Authentication
+- SQLite (development)
+
+**Frontend**
+
+- React (Vite)
+- Context API for auth state
+- Protected routing
 
 ## What You Need
 
 ### Prerequisites
+
 - **Node.js** 18+ (for React frontend)
 - **Python** 3.10+ (for Flask backend)
-- **OpenAI API key** or **Google Gemini API key** (for AI scheduling)
 
 ### Install Dependencies
 
 **Backend:**
+
 ```bash
 cd backend
 python -m venv venv
@@ -20,25 +59,14 @@ pip install -r requirements.txt
 ```
 
 **Frontend:**
+
 ```bash
 cd frontend
 npm install
 ```
 
-### Environment Setup
-
-Create `backend/.env`:
-```
-SECRET_KEY=your-secret-key-change-in-production
-DATABASE_URL=sqlite:///mediconnect.db
-OPENAI_API_KEY=sk-your-openai-key
-# Or for Gemini:
-# GEMINI_API_KEY=your-gemini-key
-```
-
-### Run the Application
-
 **Terminal 1 - Backend:**
+
 ```bash
 cd backend
 source venv/bin/activate
@@ -46,6 +74,7 @@ python run.py
 ```
 
 **Terminal 2 - Frontend:**
+
 ```bash
 cd frontend
 npm run dev
@@ -60,12 +89,3 @@ npm run dev
 cd backend
 python seed.py
 ```
-
-Creates: `patient@test.com` / `staff@test.com` (password: `password123`)
-
-## Features
-
-- **Patient Portal**: Tickets, appointments, lab results
-- **Staff Portal**: Manage tickets, schedule, upload lab results
-- **AI Scheduling**: Natural language ("next week after 2pm") → slot recommendations
-- **Admin Analytics**: Ticket metrics, CSV export
