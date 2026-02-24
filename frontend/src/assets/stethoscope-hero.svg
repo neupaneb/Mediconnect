@@ -1,0 +1,19 @@
+<svg width="860" height="640" viewBox="0 0 860 640" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="860" y2="640" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#E7F6F2"/>
+      <stop offset="1" stop-color="#DFF1FF"/>
+    </linearGradient>
+  </defs>
+  <rect width="860" height="640" rx="36" fill="url(#bg)"/>
+  <circle cx="660" cy="170" r="22" fill="#F5B700"/>
+  <circle cx="710" cy="170" r="22" fill="#F5B700"/>
+  <path d="M660 192V240C660 272 632 298 598 298C564 298 536 272 536 240V192" stroke="#9A6A00" stroke-width="14" stroke-linecap="round"/>
+  <path d="M562 238V330C562 397 617 452 684 452C751 452 806 397 806 330V260" stroke="#F2B705" stroke-width="16" stroke-linecap="round"/>
+  <circle cx="806" cy="248" r="26" fill="#F2B705"/>
+  <circle cx="806" cy="248" r="10" fill="#9A6A00"/>
+  <path d="M542 250C542 216 568 188 602 188" stroke="#B8840B" stroke-width="8" stroke-linecap="round"/>
+  <circle cx="300" cy="334" r="118" fill="#FDBA74" fill-opacity="0.22"/>
+  <path d="M312 414C312 382 338 356 370 356C404 356 430 382 430 414C430 468 377 503 377 503C377 503 312 470 312 414Z" fill="#F15B4E"/>
+  <circle cx="260" cy="224" r="54" fill="#ffffff" fill-opacity="0.75"/>
+</svg>
