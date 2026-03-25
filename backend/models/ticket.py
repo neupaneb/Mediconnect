@@ -3,6 +3,8 @@ from datetime import datetime
 
 TICKET_CATEGORIES = ['appointment_request', 'billing_issue', 'prescription_request', 'general_inquiry']
 TICKET_STATUSES = ['Open', 'In Review', 'Waiting on Patient', 'Resolved', 'Closed']
+TICKET_PRIORITIES = ['routine', 'priority', 'urgent']
+TICKET_DEPARTMENTS = ['Scheduling', 'Billing', 'Pharmacy', 'Laboratory', 'Primary Care']
 
 class Ticket(db.Model):
     __tablename__ = 'tickets'
@@ -13,6 +15,8 @@ class Ticket(db.Model):
     category = db.Column(db.String(50), nullable=False)
     subject = db.Column(db.String(200), nullable=False)
     status = db.Column(db.String(30), default='Open')
+    priority = db.Column(db.String(20), default='routine')
+    department = db.Column(db.String(50), default='Primary Care')
     lab_result_id = db.Column(db.Integer, db.ForeignKey('lab_results.id'), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -29,6 +33,8 @@ class Ticket(db.Model):
             'category': self.category,
             'subject': self.subject,
             'status': self.status,
+            'priority': self.priority,
+            'department': self.department,
             'lab_result_id': self.lab_result_id,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None,
@@ -44,6 +50,7 @@ class TicketMessage(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     content = db.Column(db.Text, nullable=False)
     attachment_path = db.Column(db.String(255), nullable=True)
+    internal_only = db.Column(db.Boolean, default=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
     user = db.relationship('User', backref='ticket_messages')
@@ -56,5 +63,6 @@ class TicketMessage(db.Model):
             'user_name': f"{self.user.first_name} {self.user.last_name}" if self.user else None,
             'content': self.content,
             'attachment_path': self.attachment_path,
+            'internal_only': self.internal_only,
             'created_at': self.created_at.isoformat() if self.created_at else None
         }

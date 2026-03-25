@@ -1,7 +1,7 @@
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity, get_jwt
 from models.user import db
-from models.appointment import Appointment, Availability
+from models.appointment import Appointment, AppointmentIntake, Availability
 from datetime import datetime, date, time, timedelta
 
 bp = Blueprint('appointments', __name__)
@@ -26,6 +26,14 @@ def get_booked_slots(d):
         appointment_date=d, status='scheduled'
     ).all()
     return [(a.start_time, a.end_time) for a in appointments]
+
+
+def get_duration_minutes(data):
+    try:
+        duration = int(data.get('duration_minutes', 30))
+    except (TypeError, ValueError):
+        duration = 30
+    return max(15, min(duration, 120))
 
 def filter_available(slots, booked):
     result = []
@@ -105,7 +113,7 @@ def create_appointment():
         
         appointment_date = datetime.strptime(data['appointment_date'], '%Y-%m-%d').date()
         start_time = datetime.strptime(data['start_time'], '%H:%M').time()
-        duration = data.get('duration_minutes', 30)
+        duration = get_duration_minutes(data)
         end_time = (datetime.combine(date.today(), start_time) + timedelta(minutes=duration)).time()
         
         conflicts = Appointment.query.filter_by(
@@ -126,6 +134,16 @@ def create_appointment():
             ticket_id=data.get('ticket_id')
         )
         db.session.add(appointment)
+        db.session.flush()
+
+        intake = AppointmentIntake(
+            appointment_id=appointment.id,
+            visit_type=data.get('visit_type', 'primary_care'),
+            urgency=data.get('urgency', 'routine'),
+            symptom_summary=data.get('symptom_summary'),
+            medications=data.get('medications')
+        )
+        db.session.add(intake)
         db.session.commit()
         return jsonify(appointment.to_dict()), 201
     except Exception as e:
@@ -164,7 +182,17 @@ def update_appointment(aid):
             appointment.appointment_date = new_date
             appointment.start_time = new_start
             appointment.end_time = new_end
-        
+
+        if role == 'patient' and appointment.intake:
+            if data.get('visit_type'):
+                appointment.intake.visit_type = data['visit_type']
+            if data.get('urgency'):
+                appointment.intake.urgency = data['urgency']
+            if 'symptom_summary' in data:
+                appointment.intake.symptom_summary = data.get('symptom_summary')
+            if 'medications' in data:
+                appointment.intake.medications = data.get('medications')
+
         db.session.commit()
         return jsonify(appointment.to_dict())
     except Exception as e:

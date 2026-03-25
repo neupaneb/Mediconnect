@@ -4,6 +4,7 @@ from models.appointment import Appointment, Availability
 from datetime import datetime, date, time, timedelta
 import json
 import os
+import re
 
 bp = Blueprint('ai_scheduling', __name__)
 
@@ -53,11 +54,92 @@ Request: {prompt}"""
         return None
 
 def parse_request(prompt):
-    if os.getenv('OPENAI_API_KEY'):
-        return parse_with_openai(prompt)
-    if os.getenv('GEMINI_API_KEY'):
-        return parse_with_gemini(prompt)
-    return None
+    openai_key = os.getenv('OPENAI_API_KEY')
+    gemini_key = os.getenv('GEMINI_API_KEY')
+
+    if openai_key:
+        parsed = parse_with_openai(prompt)
+        if parsed:
+            return parsed
+    if gemini_key:
+        parsed = parse_with_gemini(prompt)
+        if parsed:
+            return parsed
+    return parse_with_rules(prompt)
+
+
+def parse_with_rules(prompt):
+    text = (prompt or '').lower()
+    today = date.today()
+    after = today
+    before = today + timedelta(days=14)
+    prefer_time_start = None
+    prefer_time_end = None
+
+    weekday_map = {
+        'monday': 0,
+        'tuesday': 1,
+        'wednesday': 2,
+        'thursday': 3,
+        'friday': 4,
+        'saturday': 5,
+        'sunday': 6,
+    }
+
+    if 'tomorrow' in text:
+        after = today + timedelta(days=1)
+        before = after
+    elif 'next week' in text:
+        days_to_next_monday = (7 - today.weekday()) or 7
+        after = today + timedelta(days=days_to_next_monday)
+        before = after + timedelta(days=6)
+    elif 'this week' in text:
+        before = today + timedelta(days=max(0, 6 - today.weekday()))
+
+    for name, weekday in weekday_map.items():
+        if name in text:
+            offset = (weekday - today.weekday()) % 7
+            target = today + timedelta(days=offset)
+            if 'next' in text and offset == 0:
+                target += timedelta(days=7)
+            after = target
+            before = target
+            break
+
+    if 'morning' in text:
+        prefer_time_start = '08:00'
+        prefer_time_end = '12:00'
+    elif 'afternoon' in text:
+        prefer_time_start = '12:00'
+        prefer_time_end = '17:00'
+    elif 'evening' in text:
+        prefer_time_start = '16:00'
+        prefer_time_end = '19:00'
+
+    after_match = re.search(r'after\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)?', text)
+    before_match = re.search(r'before\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)?', text)
+
+    def normalize_hour(hour, minute, meridiem):
+        hour = int(hour)
+        minute = int(minute or 0)
+        if meridiem == 'pm' and hour != 12:
+            hour += 12
+        if meridiem == 'am' and hour == 12:
+            hour = 0
+        return f'{hour:02d}:{minute:02d}'
+
+    if after_match:
+        prefer_time_start = normalize_hour(*after_match.groups())
+    if before_match:
+        prefer_time_end = normalize_hour(*before_match.groups())
+
+    return {
+        'after_date': after.isoformat(),
+        'before_date': before.isoformat(),
+        'prefer_time_start': prefer_time_start,
+        'prefer_time_end': prefer_time_end,
+        'duration_minutes': 30
+    }
 
 def get_slots_for_date(d, availabilities):
     slots = []
@@ -100,12 +182,6 @@ def recommend_slots():
         return jsonify({'error': 'Natural language request required'}), 400
     
     constraints = parse_request(prompt)
-    if not constraints:
-        return jsonify({
-            'error': 'AI parsing unavailable. Add OPENAI_API_KEY or GEMINI_API_KEY to .env',
-            'slots': []
-        }), 503
-    
     today = date.today()
     after = constraints.get('after_date') or today.isoformat()
     before = constraints.get('before_date') or (today + timedelta(days=14)).isoformat()

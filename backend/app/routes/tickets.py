@@ -2,9 +2,29 @@ from functools import wraps
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity, get_jwt
 from models.user import User, db
-from models.ticket import Ticket, TicketMessage, TICKET_CATEGORIES, TICKET_STATUSES
+from models.ticket import Ticket, TicketMessage, TICKET_CATEGORIES, TICKET_STATUSES, TICKET_DEPARTMENTS, TICKET_PRIORITIES
 
 bp = Blueprint('tickets', __name__)
+
+
+def default_department_for_category(category):
+    mapping = {
+        'appointment_request': 'Scheduling',
+        'billing_issue': 'Billing',
+        'prescription_request': 'Pharmacy',
+        'general_inquiry': 'Primary Care',
+    }
+    return mapping.get(category, 'Primary Care')
+
+
+def default_priority_for_category(category):
+    mapping = {
+        'appointment_request': 'routine',
+        'billing_issue': 'priority',
+        'prescription_request': 'priority',
+        'general_inquiry': 'routine',
+    }
+    return mapping.get(category, 'routine')
 
 @bp.route('', methods=['GET'])
 @jwt_required()
@@ -17,12 +37,25 @@ def list_tickets():
     else:
         status = request.args.get('status')
         category = request.args.get('category')
+        department = request.args.get('department')
+        priority = request.args.get('priority')
         query = Ticket.query
         if status:
             query = query.filter_by(status=status)
         if category:
             query = query.filter_by(category=category)
-        tickets = query.order_by(Ticket.updated_at.desc()).all()
+        if department:
+            query = query.filter_by(department=department)
+        if priority:
+            query = query.filter_by(priority=priority)
+        tickets = query.order_by(
+            db.case(
+                (Ticket.priority == 'urgent', 0),
+                (Ticket.priority == 'priority', 1),
+                else_=2
+            ),
+            Ticket.updated_at.asc()
+        ).all()
     
     return jsonify([t.to_dict() for t in tickets])
 
@@ -42,11 +75,15 @@ def create_ticket():
         category = data.get('category', 'general_inquiry')
         if category not in TICKET_CATEGORIES:
             category = 'general_inquiry'
+        department = data.get('department') if data.get('department') in TICKET_DEPARTMENTS else default_department_for_category(category)
+        priority = data.get('priority') if data.get('priority') in TICKET_PRIORITIES else default_priority_for_category(category)
         
         ticket = Ticket(
             patient_id=user_id,
             category=category,
             subject=data['subject'],
+            department=department,
+            priority=priority,
             lab_result_id=data.get('lab_result_id')
         )
         db.session.add(ticket)
@@ -73,7 +110,10 @@ def get_ticket(ticket_id):
         return jsonify({'error': 'Access denied'}), 403
     
     result = ticket.to_dict()
-    result['messages'] = [m.to_dict() for m in ticket.messages]
+    messages = ticket.messages
+    if role == 'patient':
+        messages = [m for m in messages if not m.internal_only]
+    result['messages'] = [m.to_dict() for m in messages]
     return jsonify(result)
 
 @bp.route('/<int:ticket_id>', methods=['PATCH'])
@@ -89,6 +129,10 @@ def update_ticket(ticket_id):
             ticket.status = data['status']
         if data.get('assigned_to_id') is not None:
             ticket.assigned_to_id = data['assigned_to_id']
+        if data.get('department') and data['department'] in TICKET_DEPARTMENTS:
+            ticket.department = data['department']
+        if data.get('priority') and data['priority'] in TICKET_PRIORITIES:
+            ticket.priority = data['priority']
         db.session.commit()
     elif role == 'patient' and ticket.patient_id == user_id:
         data = request.get_json()
@@ -117,7 +161,8 @@ def add_message(ticket_id):
     if not data or not data.get('content'):
         return jsonify({'error': 'Content required'}), 400
     
-    msg = TicketMessage(ticket_id=ticket_id, user_id=user_id, content=data['content'])
+    internal_only = bool(data.get('internal_only')) if role == 'staff' else False
+    msg = TicketMessage(ticket_id=ticket_id, user_id=user_id, content=data['content'], internal_only=internal_only)
     db.session.add(msg)
     if ticket.status == 'Resolved' or ticket.status == 'Closed':
         ticket.status = 'In Review'
@@ -132,3 +177,13 @@ def categories():
 @bp.route('/statuses', methods=['GET'])
 def statuses():
     return jsonify(TICKET_STATUSES)
+
+
+@bp.route('/departments', methods=['GET'])
+def departments():
+    return jsonify(TICKET_DEPARTMENTS)
+
+
+@bp.route('/priorities', methods=['GET'])
+def priorities():
+    return jsonify(TICKET_PRIORITIES)
