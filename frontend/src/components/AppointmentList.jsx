@@ -1,4 +1,13 @@
+import { Fragment } from 'react';
 import { appointments as appointmentsApi } from '../api';
+
+const VISIT_TYPE_LABELS = {
+  primary_care: 'Primary care',
+  follow_up: 'Follow-up',
+  urgent_visit: 'Urgent visit',
+  lab_review: 'Lab review',
+  vaccination: 'Vaccination',
+};
 
 export default function AppointmentList({ appointments, onUpdate, patientView, staffView }) {
   const cancel = async (id) => {
@@ -37,17 +46,43 @@ export default function AppointmentList({ appointments, onUpdate, patientView, s
           </thead>
           <tbody>
             {filtered.map((a) => (
-              <tr key={a.id}>
-                {staffView && <td><strong>{a.patient_name}</strong></td>}
-                <td>{a.appointment_date}</td>
-                <td>{a.start_time} – {a.end_time}</td>
-                <td><span className={`badge badge-${a.status === 'scheduled' ? 'scheduled' : 'cancelled'}`}>{a.status}</span></td>
-                {patientView && (
+              <Fragment key={a.id}>
+                <tr>
+                  {staffView && <td><strong>{a.patient_name}</strong></td>}
                   <td>
-                    <button className="btn btn-small btn-secondary" onClick={() => cancel(a.id)}>Cancel</button>
+                    <div>{a.appointment_date}</div>
+                    {a.intake?.visit_type && (
+                      <div className="text-muted" style={{ fontSize: '0.85rem' }}>
+                        {VISIT_TYPE_LABELS[a.intake.visit_type] || a.intake.visit_type}
+                      </div>
+                    )}
                   </td>
+                  <td>{a.start_time} – {a.end_time}</td>
+                  <td>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', alignItems: 'flex-start' }}>
+                      <span className={`badge badge-${a.status === 'scheduled' ? 'scheduled' : 'cancelled'}`}>{a.status}</span>
+                      {a.intake?.urgency && (
+                        <span className={`badge badge-urgency-${a.intake.urgency}`}>{a.intake.urgency}</span>
+                      )}
+                    </div>
+                  </td>
+                  {patientView && (
+                    <td>
+                      <button className="btn btn-small btn-secondary" onClick={() => cancel(a.id)}>Cancel</button>
+                    </td>
+                  )}
+                </tr>
+                {a.intake?.symptom_summary && (
+                  <tr className="appointment-intake-row">
+                    {staffView && <td></td>}
+                    <td colSpan={staffView ? 3 : 2}>
+                      <strong>Intake:</strong> {a.intake.symptom_summary}
+                      {a.intake.medications ? ` | Medications/notes: ${a.intake.medications}` : ''}
+                    </td>
+                    {patientView && <td></td>}
+                  </tr>
                 )}
-              </tr>
+              </Fragment>
             ))}
           </tbody>
         </table>

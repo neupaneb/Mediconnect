@@ -22,7 +22,7 @@ export default function Layout({ children, title, isStaff, tabs, activeTab, onTa
               onClick={() => onTabChange?.(item.id)}
             >
               <span className="nav-icon">{item.icon}</span>
-              {item.label}
+              <span className="nav-label">{item.label}</span>
             </button>
           ))}
         </nav>

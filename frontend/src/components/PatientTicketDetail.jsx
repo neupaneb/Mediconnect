@@ -39,6 +39,8 @@ export default function PatientTicketDetail({ ticketId, onClose, onUpdate }) {
           <h2 style={{ margin: 0 }}>{ticket.subject}</h2>
           <div style={{ fontSize: '0.9rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
             Status: <span className={`badge badge-${ticket.status === 'Open' ? 'open' : ticket.status === 'Resolved' || ticket.status === 'Closed' ? 'resolved' : 'review'}`}>{ticket.status}</span>
+            {' • '}Department: {ticket.department}
+            {' • '}Priority: <span className={`badge badge-priority-${ticket.priority}`}>{ticket.priority}</span>
             {' • '}{ticket.created_at && new Date(ticket.created_at).toLocaleString()}
           </div>
         </div>

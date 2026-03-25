@@ -35,7 +35,7 @@ export const tickets = {
   get: (id) => api(`/tickets/${id}`),
   create: (body) => api('/tickets', { method: 'POST', body: JSON.stringify(body) }),
   update: (id, body) => api(`/tickets/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
-  addMessage: (id, content) => api(`/tickets/${id}/messages`, { method: 'POST', body: JSON.stringify({ content }) }),
+  addMessage: (id, content, internalOnly = false) => api(`/tickets/${id}/messages`, { method: 'POST', body: JSON.stringify({ content, internal_only: internalOnly }) }),
   categories: () => api('/tickets/categories'),
   statuses: () => api('/tickets/statuses'),
 };

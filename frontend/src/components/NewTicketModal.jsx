@@ -8,9 +8,14 @@ const CATEGORIES = {
   general_inquiry: 'General Inquiry',
 };
 
+const DEPARTMENTS = ['Scheduling', 'Billing', 'Pharmacy', 'Laboratory', 'Primary Care'];
+const PRIORITIES = ['routine', 'priority', 'urgent'];
+
 export default function NewTicketModal({ onClose, onCreated }) {
   const [subject, setSubject] = useState('');
   const [category, setCategory] = useState('general_inquiry');
+  const [department, setDepartment] = useState('Primary Care');
+  const [priority, setPriority] = useState('routine');
   const [content, setContent] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -20,7 +25,7 @@ export default function NewTicketModal({ onClose, onCreated }) {
     setError('');
     setLoading(true);
     try {
-      await ticketsApi.create({ subject, category, content });
+      await ticketsApi.create({ subject, category, department, priority, content });
       onCreated?.();
       onClose();
     } catch (err) {
@@ -56,6 +61,24 @@ export default function NewTicketModal({ onClose, onCreated }) {
                 required
                 placeholder="Brief description of your request"
               />
+            </div>
+            <div className="form-row">
+              <div className="form-group">
+                <label>Department</label>
+                <select value={department} onChange={(e) => setDepartment(e.target.value)}>
+                  {DEPARTMENTS.map((item) => (
+                    <option key={item} value={item}>{item}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="form-group">
+                <label>Priority</label>
+                <select value={priority} onChange={(e) => setPriority(e.target.value)}>
+                  {PRIORITIES.map((item) => (
+                    <option key={item} value={item}>{item}</option>
+                  ))}
+                </select>
+              </div>
             </div>
             <div className="form-group">
               <label>Message</label>

@@ -28,14 +28,14 @@ export default function StaffDashboard() {
   const [ticketList, setTicketList] = useState([]);
   const [appointments, setAppointments] = useState([]);
   const [selectedTicket, setSelectedTicket] = useState(null);
-  const [filter, setFilter] = useState({ status: '', category: '' });
+  const [filter, setFilter] = useState({ status: '', category: '', department: '', priority: '' });
 
   const load = () => {
     ticketsApi.list(filter).then(setTicketList).catch(console.error);
     appointmentsApi.list().then(setAppointments).catch(console.error);
   };
 
-  useEffect(load, [filter.status, filter.category]);
+  useEffect(load, [filter.status, filter.category, filter.department, filter.priority]);
 
   return (
     <Layout
@@ -69,6 +69,26 @@ export default function StaffDashboard() {
               {Object.entries(CATEGORIES).map(([k, v]) => (
                 <option key={k} value={k}>{v}</option>
               ))}
+            </select>
+            <select
+              value={filter.department}
+              onChange={(e) => setFilter({ ...filter, department: e.target.value })}
+            >
+              <option value="">All departments</option>
+              <option value="Scheduling">Scheduling</option>
+              <option value="Billing">Billing</option>
+              <option value="Pharmacy">Pharmacy</option>
+              <option value="Laboratory">Laboratory</option>
+              <option value="Primary Care">Primary Care</option>
+            </select>
+            <select
+              value={filter.priority}
+              onChange={(e) => setFilter({ ...filter, priority: e.target.value })}
+            >
+              <option value="">All priorities</option>
+              <option value="urgent">Urgent</option>
+              <option value="priority">Priority</option>
+              <option value="routine">Routine</option>
             </select>
           </div>
           {selectedTicket ? (
