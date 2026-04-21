@@ -3,8 +3,20 @@ from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity, get_jwt
 from models.user import User, db
 from models.ticket import Ticket, TicketMessage, TICKET_CATEGORIES, TICKET_STATUSES, TICKET_DEPARTMENTS, TICKET_PRIORITIES
+import json
+import os
+import re
 
 bp = Blueprint('tickets', __name__)
+
+TICKET_AI_PROMPT = f"""You help a patient draft a support ticket for a healthcare portal.
+Respond ONLY with valid JSON, no markdown.
+Allowed categories: {", ".join(TICKET_CATEGORIES)}
+Allowed departments: {", ".join(TICKET_DEPARTMENTS)}
+Allowed priorities: {", ".join(TICKET_PRIORITIES)}
+Return this exact shape:
+{{"subject": "short title", "content": "clear patient-facing message", "category": "general_inquiry", "department": "Primary Care", "priority": "routine"}}
+Keep the content concise, neutral, and suitable for staff review. Do not add medical advice or diagnosis."""
 
 
 def default_department_for_category(category):
@@ -25,6 +37,148 @@ def default_priority_for_category(category):
         'general_inquiry': 'routine',
     }
     return mapping.get(category, 'routine')
+
+
+def extract_json_object(text):
+    if not text:
+        return None
+
+    cleaned = text.strip()
+    if cleaned.startswith('```'):
+        parts = cleaned.split('```')
+        if len(parts) > 1:
+            cleaned = parts[1].strip()
+            if cleaned.startswith('json'):
+                cleaned = cleaned[4:].strip()
+
+    try:
+        return json.loads(cleaned)
+    except json.JSONDecodeError:
+        match = re.search(r'\{.*\}', cleaned, re.DOTALL)
+        if not match:
+            return None
+        try:
+            return json.loads(match.group(0))
+        except json.JSONDecodeError:
+            return None
+
+
+def normalize_ticket_suggestion(parsed, source_text, source_subject=''):
+    if not isinstance(parsed, dict):
+        return None
+
+    category = parsed.get('category')
+    if category not in TICKET_CATEGORIES:
+        category = 'general_inquiry'
+
+    department = parsed.get('department')
+    if department not in TICKET_DEPARTMENTS:
+        department = default_department_for_category(category)
+
+    priority = parsed.get('priority')
+    if priority not in TICKET_PRIORITIES:
+        priority = default_priority_for_category(category)
+
+    subject = (parsed.get('subject') or source_subject or '').strip()
+    if not subject:
+        subject = 'Support request'
+
+    content = (parsed.get('content') or source_text or '').strip()
+    if not content:
+        return None
+
+    return {
+        'subject': subject[:200],
+        'content': content,
+        'category': category,
+        'department': department,
+        'priority': priority,
+    }
+
+
+def suggest_with_gemini(subject, content):
+    try:
+        import google.generativeai as genai
+
+        genai.configure(api_key=os.getenv('GEMINI_API_KEY'))
+        model = genai.GenerativeModel('gemini-1.5-flash')
+        response = model.generate_content(
+            f"""{TICKET_AI_PROMPT}
+
+Current subject: {subject or "None"}
+Patient draft message:
+{content}"""
+        )
+        text = getattr(response, 'text', '').strip()
+        return normalize_ticket_suggestion(extract_json_object(text), content, subject)
+    except Exception:
+        return None
+
+
+def suggest_with_openai(subject, content):
+    try:
+        import openai
+
+        client = openai.OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
+        response = client.chat.completions.create(
+            model='gpt-4o-mini',
+            messages=[
+                {'role': 'system', 'content': TICKET_AI_PROMPT},
+                {
+                    'role': 'user',
+                    'content': f"Current subject: {subject or 'None'}\nPatient draft message:\n{content}",
+                },
+            ],
+            temperature=0.2,
+        )
+        text = response.choices[0].message.content.strip()
+        return normalize_ticket_suggestion(extract_json_object(text), content, subject)
+    except Exception:
+        return None
+
+
+def suggest_with_rules(subject, content):
+    text = f"{subject or ''}\n{content or ''}".lower()
+
+    category = 'general_inquiry'
+    if any(term in text for term in ['appointment', 'reschedule', 'schedule', 'slot']):
+        category = 'appointment_request'
+    elif any(term in text for term in ['bill', 'billing', 'charge', 'insurance', 'payment']):
+        category = 'billing_issue'
+    elif any(term in text for term in ['prescription', 'refill', 'medication', 'pharmacy']):
+        category = 'prescription_request'
+
+    priority = default_priority_for_category(category)
+    if any(term in text for term in ['urgent', 'asap', 'immediately', 'today']):
+        priority = 'urgent'
+
+    content_text = (content or '').strip()
+    subject_text = (subject or '').strip()
+    if not subject_text:
+        subject_text = content_text.split('.')[0][:60].strip() or 'Support request'
+
+    return {
+        'subject': subject_text[:200],
+        'content': content_text,
+        'category': category,
+        'department': default_department_for_category(category),
+        'priority': priority,
+    }
+
+
+def generate_ticket_suggestion(subject, content):
+    gemini_key = os.getenv('GEMINI_API_KEY')
+    openai_key = os.getenv('OPENAI_API_KEY')
+
+    if gemini_key:
+        suggestion = suggest_with_gemini(subject, content)
+        if suggestion:
+            return suggestion, 'gemini'
+    if openai_key:
+        suggestion = suggest_with_openai(subject, content)
+        if suggestion:
+            return suggestion, 'openai'
+    return suggest_with_rules(subject, content), 'rules'
 
 @bp.route('', methods=['GET'])
 @jwt_required()
@@ -98,6 +252,26 @@ def create_ticket():
     except Exception as e:
         db.session.rollback()
         return jsonify({'error': str(e)}), 500
+
+
+@bp.route('/ai-assist', methods=['POST'])
+@jwt_required()
+def ai_assist_ticket():
+    role = get_jwt().get('role')
+    if role != 'patient':
+        return jsonify({'error': 'Only patients can use AI ticket assist'}), 403
+
+    data = request.get_json() or {}
+    subject = (data.get('subject') or '').strip()
+    content = (data.get('content') or data.get('message') or '').strip()
+    if not content:
+        return jsonify({'error': 'Message required'}), 400
+
+    suggestion, provider = generate_ticket_suggestion(subject, content)
+    return jsonify({
+        'suggestion': suggestion,
+        'provider': provider,
+    })
 
 @bp.route('/<int:ticket_id>', methods=['GET'])
 @jwt_required()

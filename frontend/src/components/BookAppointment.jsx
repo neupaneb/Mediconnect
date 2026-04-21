@@ -19,6 +19,7 @@ export default function BookAppointment({ onClose, onBooked }) {
   const [mode, setMode] = useState('ai');
   const [aiRequest, setAiRequest] = useState('');
   const [aiSlots, setAiSlots] = useState([]);
+  const [aiProvider, setAiProvider] = useState('');
   const [aiLoading, setAiLoading] = useState(false);
   const [selectedSlot, setSelectedSlot] = useState(null);
   const [manualDate, setManualDate] = useState('');
@@ -39,10 +40,12 @@ export default function BookAppointment({ onClose, onBooked }) {
     try {
       const data = await aiApi.recommend(aiRequest);
       setAiSlots(data.slots || []);
+      setAiProvider(data.provider || '');
       if (data.error && !data.slots?.length) setError(data.error);
     } catch (e) {
       setError(e.error || 'AI scheduling unavailable');
       setAiSlots([]);
+      setAiProvider('');
     } finally {
       setAiLoading(false);
     }
@@ -57,7 +60,7 @@ export default function BookAppointment({ onClose, onBooked }) {
       const endStr = end.toISOString().slice(0, 10);
       const data = await appointmentsApi.slots(manualDate, endStr);
       setManualSlots(data.slots || {});
-    } catch (e) {
+    } catch {
       setManualSlots({});
     } finally {
       setManualLoading(false);
@@ -142,8 +145,13 @@ export default function BookAppointment({ onClose, onBooked }) {
                 </div>
               </div>
               <p className="text-muted" style={{ marginTop: '-0.25rem', marginBottom: '1rem' }}>
-                Works with API keys or the built-in local parser for requests like "Friday morning" or "after 2pm next week".
+                Works with Gemini or OpenAI API keys, plus a built-in local parser for requests like "Friday morning" or "after 2pm next week".
               </p>
+              {aiProvider && (
+                <p className="text-muted" style={{ marginTop: '-0.75rem', marginBottom: '1rem' }}>
+                  Parsed with: {aiProvider === 'rules' ? 'local rules' : aiProvider}
+                </p>
+              )}
               {error && <p className="error">{error}</p>}
               <div className="form-group">
                 <label>Available slots</label>

@@ -8,6 +8,48 @@ import re
 
 bp = Blueprint('ai_scheduling', __name__)
 
+JSON_PARSE_PROMPT = """You parse appointment requests into JSON. Respond ONLY with valid JSON, no markdown.
+Format: {"after_date": "YYYY-MM-DD", "before_date": "YYYY-MM-DD", "prefer_time_start": "HH:MM", "prefer_time_end": "HH:MM", "duration_minutes": 30}
+Use null for unspecified fields. Interpret relative dates from today."""
+
+
+def extract_json_object(text):
+    if not text:
+        return None
+
+    cleaned = text.strip()
+    if cleaned.startswith('```'):
+        parts = cleaned.split('```')
+        if len(parts) > 1:
+            cleaned = parts[1].strip()
+            if cleaned.startswith('json'):
+                cleaned = cleaned[4:].strip()
+
+    try:
+        return json.loads(cleaned)
+    except json.JSONDecodeError:
+        match = re.search(r'\{.*\}', cleaned, re.DOTALL)
+        if not match:
+            return None
+        try:
+            return json.loads(match.group(0))
+        except json.JSONDecodeError:
+            return None
+
+
+def normalize_constraints(parsed):
+    if not isinstance(parsed, dict):
+        return None
+
+    normalized = {
+        'after_date': parsed.get('after_date'),
+        'before_date': parsed.get('before_date'),
+        'prefer_time_start': parsed.get('prefer_time_start'),
+        'prefer_time_end': parsed.get('prefer_time_end'),
+        'duration_minutes': parsed.get('duration_minutes') or 30,
+    }
+    return normalized
+
 def parse_with_openai(prompt):
     try:
         import openai
@@ -16,21 +58,15 @@ def parse_with_openai(prompt):
             model="gpt-4o-mini",
             messages=[{
                 "role": "system",
-                "content": """You parse appointment requests into JSON. Respond ONLY with valid JSON, no markdown.
-Format: {"after_date": "YYYY-MM-DD", "before_date": "YYYY-MM-DD", "prefer_time_start": "HH:MM", "prefer_time_end": "HH:MM", "duration_minutes": 30}
-Use null for unspecified fields. Interpret relative dates from today."""
+                "content": JSON_PARSE_PROMPT
             }, {
                 "role": "user",
-                "content": prompt
+                "content": f"Today is {date.today().isoformat()}.\n\nRequest: {prompt}"
             }],
             temperature=0
         )
         text = response.choices[0].message.content.strip()
-        if text.startswith('```'):
-            text = text.split('```')[1]
-            if text.startswith('json'):
-                text = text[4:]
-        return json.loads(text)
+        return normalize_constraints(extract_json_object(text))
     except Exception as e:
         return None
 
@@ -38,34 +74,31 @@ def parse_with_gemini(prompt):
     try:
         import google.generativeai as genai
         genai.configure(api_key=os.getenv('GEMINI_API_KEY'))
-        model = genai.GenerativeModel('gemini-pro')
+        model = genai.GenerativeModel('gemini-1.5-flash')
         response = model.generate_content(
-            f"""Parse this appointment request into JSON. Reply ONLY with JSON, no markdown.
-Format: {{"after_date": "YYYY-MM-DD", "before_date": "YYYY-MM-DD", "prefer_time_start": "HH:MM", "prefer_time_end": "HH:MM", "duration_minutes": 30}}
-Use null for unspecified. Today is {date.today().isoformat()}.
+            f"""{JSON_PARSE_PROMPT}
+Today is {date.today().isoformat()}.
 
 Request: {prompt}"""
         )
-        text = response.text.strip()
-        if '```' in text:
-            text = text.split('```')[1].replace('json', '').strip()
-        return json.loads(text)
+        text = getattr(response, 'text', '').strip()
+        return normalize_constraints(extract_json_object(text))
     except Exception:
         return None
 
 def parse_request(prompt):
-    openai_key = os.getenv('OPENAI_API_KEY')
     gemini_key = os.getenv('GEMINI_API_KEY')
+    openai_key = os.getenv('OPENAI_API_KEY')
 
-    if openai_key:
-        parsed = parse_with_openai(prompt)
-        if parsed:
-            return parsed
     if gemini_key:
         parsed = parse_with_gemini(prompt)
         if parsed:
-            return parsed
-    return parse_with_rules(prompt)
+            return parsed, 'gemini'
+    if openai_key:
+        parsed = parse_with_openai(prompt)
+        if parsed:
+            return parsed, 'openai'
+    return parse_with_rules(prompt), 'rules'
 
 
 def parse_with_rules(prompt):
@@ -181,7 +214,7 @@ def recommend_slots():
     if not prompt:
         return jsonify({'error': 'Natural language request required'}), 400
     
-    constraints = parse_request(prompt)
+    constraints, provider = parse_request(prompt)
     today = date.today()
     after = constraints.get('after_date') or today.isoformat()
     before = constraints.get('before_date') or (today + timedelta(days=14)).isoformat()
@@ -225,5 +258,6 @@ def recommend_slots():
     
     return jsonify({
         'slots': all_slots[:20],
-        'constraints': constraints
+        'constraints': constraints,
+        'provider': provider
     })

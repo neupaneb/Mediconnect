@@ -1,4 +1,4 @@
-const API_BASE = '/api';
+const API_BASE = (import.meta.env.VITE_API_BASE || '/api').replace(/\/$/, '');
 
 function getToken() {
   return localStorage.getItem('token');
@@ -34,6 +34,7 @@ export const tickets = {
   list: (params) => api('/tickets' + (params ? '?' + new URLSearchParams(params) : '')),
   get: (id) => api(`/tickets/${id}`),
   create: (body) => api('/tickets', { method: 'POST', body: JSON.stringify(body) }),
+  aiAssist: (body) => api('/tickets/ai-assist', { method: 'POST', body: JSON.stringify(body) }),
   update: (id, body) => api(`/tickets/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
   addMessage: (id, content, internalOnly = false) => api(`/tickets/${id}/messages`, { method: 'POST', body: JSON.stringify({ content, internal_only: internalOnly }) }),
   categories: () => api('/tickets/categories'),

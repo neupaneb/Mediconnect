@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { tickets as ticketsApi } from '../api';
+import { tickets as ticketsApi, aiScheduling as aiSchedulingApi, appointments as appointmentsApi } from '../api';
 
 const CATEGORIES = {
   appointment_request: 'Appointment Request',
@@ -12,20 +12,76 @@ const DEPARTMENTS = ['Scheduling', 'Billing', 'Pharmacy', 'Laboratory', 'Primary
 const PRIORITIES = ['routine', 'priority', 'urgent'];
 
 export default function NewTicketModal({ onClose, onCreated }) {
+  const [aiMessage, setAiMessage] = useState('');
   const [subject, setSubject] = useState('');
   const [category, setCategory] = useState('general_inquiry');
   const [department, setDepartment] = useState('Primary Care');
   const [priority, setPriority] = useState('routine');
   const [content, setContent] = useState('');
+  const [aiProvider, setAiProvider] = useState('');
+  const [aiLoading, setAiLoading] = useState(false);
+  const [suggestedSlots, setSuggestedSlots] = useState([]);
+  const [selectedSlot, setSelectedSlot] = useState(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+
+  const handleAiAssist = async () => {
+    if (!aiMessage.trim()) {
+      setError('Add your AI request first so the assistant can draft the ticket.');
+      return;
+    }
+
+    setAiLoading(true);
+    setError('');
+    try {
+      const data = await ticketsApi.aiAssist({ subject, content: aiMessage });
+      const suggestion = data.suggestion || {};
+      setSubject(suggestion.subject || subject);
+      setCategory(suggestion.category || category);
+      setDepartment(suggestion.department || department);
+      setPriority(suggestion.priority || priority);
+      setContent(suggestion.content || aiMessage);
+      setAiProvider(data.provider || '');
+
+      const nextCategory = suggestion.category || category;
+      if (nextCategory === 'appointment_request') {
+        const scheduling = await aiSchedulingApi.recommend(aiMessage);
+        setSuggestedSlots(scheduling.slots || []);
+        setSelectedSlot((scheduling.slots || [])[0] || null);
+      } else {
+        setSuggestedSlots([]);
+        setSelectedSlot(null);
+      }
+    } catch (err) {
+      const msg = err.error || err.message || 'AI ticket assist is unavailable right now.';
+      setError(msg);
+      setAiProvider('');
+      setSuggestedSlots([]);
+      setSelectedSlot(null);
+    } finally {
+      setAiLoading(false);
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
     setLoading(true);
     try {
-      await ticketsApi.create({ subject, category, department, priority, content });
+      const ticket = await ticketsApi.create({ subject, category, department, priority, content });
+      if (selectedSlot) {
+        await appointmentsApi.create({
+          appointment_date: selectedSlot.date,
+          start_time: selectedSlot.start,
+          duration_minutes: 30,
+          notes: subject || 'Scheduled from AI support request',
+          ticket_id: ticket.id,
+          visit_type: 'primary_care',
+          urgency: priority === 'urgent' ? 'urgent' : priority === 'priority' ? 'priority' : 'routine',
+          symptom_summary: content,
+          medications: '',
+        });
+      }
       onCreated?.();
       onClose();
     } catch (err) {
@@ -45,6 +101,29 @@ export default function NewTicketModal({ onClose, onCreated }) {
         </div>
         <div className="modal-body">
           <form onSubmit={handleSubmit}>
+            <div className="form-group">
+              <label>AI Request</label>
+              <textarea
+                value={aiMessage}
+                onChange={(e) => setAiMessage(e.target.value)}
+                placeholder="Describe what you need in your own words. AI will draft the ticket and, for appointment requests, suggest booking times."
+                rows={4}
+              />
+            </div>
+            <div style={{ marginTop: '-0.5rem', marginBottom: '1rem' }}>
+              <button type="button" className="btn btn-secondary" onClick={handleAiAssist} disabled={aiLoading}>
+                {aiLoading ? 'Analyzing...' : 'Analyze with AI'}
+              </button>
+            </div>
+            <p className="text-muted" style={{ marginTop: '-0.25rem', marginBottom: '1rem' }}>
+              This field is separate from the final ticket message. It drafts the request automatically and can suggest appointment times when scheduling is mentioned.
+            </p>
+            {aiProvider && (
+              <p className="text-muted" style={{ marginTop: '-0.75rem', marginBottom: '1rem' }}>
+                Drafted with: {aiProvider === 'rules' ? 'local rules' : aiProvider}
+              </p>
+            )}
+
             <div className="form-group">
               <label>Request Type</label>
               <select value={category} onChange={(e) => setCategory(e.target.value)}>
@@ -89,10 +168,30 @@ export default function NewTicketModal({ onClose, onCreated }) {
                 rows={4}
               />
             </div>
+            {suggestedSlots.length > 0 && (
+              <div className="form-group">
+                <label>Suggested Appointment Times</label>
+                <div className="slot-grid">
+                  {suggestedSlots.map((slot, index) => (
+                    <button
+                      key={`${slot.date}-${slot.start}-${index}`}
+                      type="button"
+                      className={`slot-btn ${selectedSlot?.date === slot.date && selectedSlot?.start === slot.start ? 'selected' : ''}`}
+                      onClick={() => setSelectedSlot(slot)}
+                    >
+                      {slot.date} {slot.start}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-muted" style={{ marginTop: '0.75rem', marginBottom: 0 }}>
+                  When you submit this request, the selected slot will also be booked automatically.
+                </p>
+              </div>
+            )}
             {error && <p className="error">{error}</p>}
             <div style={{ display: 'flex', gap: '0.75rem' }}>
               <button type="submit" className="btn btn-primary" disabled={loading}>
-                {loading ? 'Submitting...' : 'Submit Request'}
+                {loading ? 'Submitting...' : selectedSlot ? 'Create Ticket and Book Appointment' : 'Submit Request'}
               </button>
               <button type="button" className="btn btn-secondary" onClick={onClose}>Cancel</button>
             </div>
