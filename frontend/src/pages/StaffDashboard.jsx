@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-import { useAuth } from '../AuthContext';
 import { tickets as ticketsApi, appointments as appointmentsApi } from '../api';
 import Layout from '../components/Layout';
 import TicketList from '../components/TicketList';
@@ -7,6 +6,7 @@ import AppointmentList from '../components/AppointmentList';
 import StaffTicketDetail from '../components/StaffTicketDetail';
 import UploadLabResult from '../components/UploadLabResult';
 import AnalyticsDashboard from '../components/AnalyticsDashboard';
+import AvailabilityManager from '../components/AvailabilityManager';
 
 const TABS = [
   { id: 'tickets', label: 'Support Queue', icon: '📋' },
@@ -23,19 +23,22 @@ const CATEGORIES = {
 };
 
 export default function StaffDashboard() {
-  const { user } = useAuth();
   const [tab, setTab] = useState('tickets');
   const [ticketList, setTicketList] = useState([]);
   const [appointments, setAppointments] = useState([]);
   const [selectedTicket, setSelectedTicket] = useState(null);
   const [filter, setFilter] = useState({ status: '', category: '', department: '', priority: '' });
+  const { status, category, department, priority } = filter;
+
+  useEffect(() => {
+    ticketsApi.list({ status, category, department, priority }).then(setTicketList).catch(console.error);
+    appointmentsApi.list().then(setAppointments).catch(console.error);
+  }, [status, category, department, priority]);
 
   const load = () => {
     ticketsApi.list(filter).then(setTicketList).catch(console.error);
     appointmentsApi.list().then(setAppointments).catch(console.error);
   };
-
-  useEffect(load, [filter.status, filter.category, filter.department, filter.priority]);
 
   return (
     <Layout
@@ -108,6 +111,7 @@ export default function StaffDashboard() {
           <div className="page-header">
             <h2>Scheduled Appointments</h2>
           </div>
+          <AvailabilityManager />
           <AppointmentList appointments={appointments} onUpdate={load} staffView />
         </>
       )}

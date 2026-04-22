@@ -19,12 +19,13 @@ export default function BookAppointment({ onClose, onBooked }) {
   const [mode, setMode] = useState('ai');
   const [aiRequest, setAiRequest] = useState('');
   const [aiSlots, setAiSlots] = useState([]);
-  const [aiProvider, setAiProvider] = useState('');
   const [aiLoading, setAiLoading] = useState(false);
+  const [aiSearched, setAiSearched] = useState(false);
   const [selectedSlot, setSelectedSlot] = useState(null);
   const [manualDate, setManualDate] = useState('');
   const [manualSlots, setManualSlots] = useState({});
   const [manualLoading, setManualLoading] = useState(false);
+  const [manualLoaded, setManualLoaded] = useState(false);
   const [notes, setNotes] = useState('');
   const [visitType, setVisitType] = useState('primary_care');
   const [urgency, setUrgency] = useState('routine');
@@ -37,15 +38,14 @@ export default function BookAppointment({ onClose, onBooked }) {
     if (!aiRequest.trim()) return;
     setAiLoading(true);
     setError('');
+    setAiSearched(true);
     try {
       const data = await aiApi.recommend(aiRequest);
       setAiSlots(data.slots || []);
-      setAiProvider(data.provider || '');
       if (data.error && !data.slots?.length) setError(data.error);
     } catch (e) {
       setError(e.error || 'AI scheduling unavailable');
       setAiSlots([]);
-      setAiProvider('');
     } finally {
       setAiLoading(false);
     }
@@ -54,6 +54,7 @@ export default function BookAppointment({ onClose, onBooked }) {
   const loadManualSlots = async () => {
     if (!manualDate) return;
     setManualLoading(true);
+    setManualLoaded(true);
     try {
       const end = new Date(`${manualDate}T00:00:00`);
       end.setDate(end.getDate() + 14);
@@ -144,14 +145,6 @@ export default function BookAppointment({ onClose, onBooked }) {
                   </button>
                 </div>
               </div>
-              <p className="text-muted" style={{ marginTop: '-0.25rem', marginBottom: '1rem' }}>
-                Works with Gemini or OpenAI API keys, plus a built-in local parser for requests like "Friday morning" or "after 2pm next week".
-              </p>
-              {aiProvider && (
-                <p className="text-muted" style={{ marginTop: '-0.75rem', marginBottom: '1rem' }}>
-                  Parsed with: {aiProvider === 'rules' ? 'local rules' : aiProvider}
-                </p>
-              )}
               {error && <p className="error">{error}</p>}
               <div className="form-group">
                 <label>Available slots</label>
@@ -167,6 +160,12 @@ export default function BookAppointment({ onClose, onBooked }) {
                     </button>
                   ))}
                 </div>
+                {aiSearched && !aiLoading && aiSlots.length === 0 && !error && (
+                  <div className="ticket-empty" style={{ marginTop: '0.75rem', marginBottom: 0 }}>
+                    <p style={{ fontSize: '1rem', marginBottom: '0.35rem' }}>No slots found right now</p>
+                    <p className="text-muted">Choose another date or try a broader request like "next week after 2pm".</p>
+                  </div>
+                )}
               </div>
             </>
           )}
@@ -201,6 +200,12 @@ export default function BookAppointment({ onClose, onBooked }) {
                     </button>
                   ))}
                 </div>
+                {manualLoaded && !manualLoading && manualDate && slotsForDate.length === 0 && (
+                  <div className="ticket-empty" style={{ marginTop: '0.75rem', marginBottom: 0 }}>
+                    <p style={{ fontSize: '1rem', marginBottom: '0.35rem' }}>The slots for this day have not opened</p>
+                    <p className="text-muted">Choose another date and try again.</p>
+                  </div>
+                )}
               </div>
             </>
           )}
