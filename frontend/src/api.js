@@ -13,10 +13,19 @@ function headers(includeAuth = true) {
 
 export async function api(path, options = {}) {
   const url = path.startsWith('http') ? path : `${API_BASE}${path}`;
-  const res = await fetch(url, {
-    ...options,
-    headers: { ...headers(!options.skipAuth), ...options.headers },
-  });
+  let res;
+  try {
+    res = await fetch(url, {
+      ...options,
+      headers: { ...headers(!options.skipAuth), ...options.headers },
+    });
+  } catch (error) {
+    throw {
+      status: 0,
+      error: 'Unable to reach the server right now. If this is the first request, please wait a few seconds and try again.',
+      detail: error?.message,
+    };
+  }
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw { status: res.status, ...data };
   return data;
@@ -27,6 +36,7 @@ export const auth = {
   login: (email, password) => api('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) }),
   register: (body) => api('/auth/register', { method: 'POST', body: JSON.stringify(body) }),
   me: () => api('/auth/me'),
+  health: () => api('/auth/health', { skipAuth: true }),
 };
 
 // Tickets

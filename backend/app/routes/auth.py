@@ -4,6 +4,10 @@ from models.user import User, db
 
 bp = Blueprint('auth', __name__)
 
+@bp.route('/health', methods=['GET'])
+def health():
+    return jsonify({'status': 'ok'}), 200
+
 @bp.route('/register', methods=['POST'])
 def register():
     data = request.get_json()
