@@ -46,6 +46,14 @@ export default function PatientDashboard() {
 
   useEffect(load, []);
 
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      load();
+    }, 10000);
+
+    return () => window.clearInterval(intervalId);
+  }, []);
+
   const scheduledAppointments = appointments.filter((a) => a.status === 'scheduled');
   const openRequests = ticketList.filter((t) => t.status !== 'Resolved' && t.status !== 'Closed');
   const nextAppointment = [...scheduledAppointments]

@@ -40,6 +40,15 @@ export default function StaffDashboard() {
     appointmentsApi.list().then(setAppointments).catch(console.error);
   };
 
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      ticketsApi.list(filter).then(setTicketList).catch(console.error);
+      appointmentsApi.list().then(setAppointments).catch(console.error);
+    }, 10000);
+
+    return () => window.clearInterval(intervalId);
+  }, [filter]);
+
   return (
     <Layout
       title="Staff Dashboard"
@@ -111,7 +120,7 @@ export default function StaffDashboard() {
           <div className="page-header">
             <h2>Scheduled Appointments</h2>
           </div>
-          <AvailabilityManager />
+          <AvailabilityManager onChanged={load} />
           <AppointmentList appointments={appointments} onUpdate={load} staffView />
         </>
       )}
@@ -121,7 +130,7 @@ export default function StaffDashboard() {
           <div className="page-header">
             <h2>Upload Lab Results</h2>
           </div>
-          <UploadLabResult onClose={() => {}} onUploaded={() => {}} />
+          <UploadLabResult onClose={() => {}} onUploaded={load} />
         </>
       )}
 

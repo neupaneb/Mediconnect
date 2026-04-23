@@ -15,7 +15,7 @@ function formatDayLabel(dayOfWeek) {
   return DAYS.find(([value]) => Number(value) === Number(dayOfWeek))?.[1] || 'Unknown';
 }
 
-export default function AvailabilityManager() {
+export default function AvailabilityManager({ onChanged }) {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -56,6 +56,7 @@ export default function AvailabilityManager() {
         slot_duration_minutes: Number(form.slot_duration_minutes),
       });
       await loadAvailability();
+      onChanged?.();
     } catch (err) {
       setError(err.error || 'Failed to save availability');
     } finally {
@@ -68,6 +69,7 @@ export default function AvailabilityManager() {
     try {
       await availabilityApi.delete(id);
       await loadAvailability();
+      onChanged?.();
     } catch (err) {
       setError(err.error || 'Failed to delete availability');
     }
