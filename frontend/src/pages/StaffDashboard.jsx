@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { tickets as ticketsApi, appointments as appointmentsApi } from '../api';
 import Layout from '../components/Layout';
 import TicketList from '../components/TicketList';
@@ -29,6 +29,7 @@ export default function StaffDashboard() {
   const [selectedTicket, setSelectedTicket] = useState(null);
   const [filter, setFilter] = useState({ status: '', category: '', department: '', priority: '' });
   const { status, category, department, priority } = filter;
+  const appointmentListRef = useRef(null);
 
   useEffect(() => {
     ticketsApi.list({ status, category, department, priority }).then(setTicketList).catch(console.error);
@@ -39,6 +40,13 @@ export default function StaffDashboard() {
     ticketsApi.list(filter).then(setTicketList).catch(console.error);
     appointmentsApi.list().then(setAppointments).catch(console.error);
   };
+
+  const upcomingAppointments = appointments.filter((appointment) => {
+    if (appointment.status !== 'scheduled' || !appointment.appointment_date || !appointment.start_time) {
+      return false;
+    }
+    return new Date(`${appointment.appointment_date}T${appointment.start_time}`) >= new Date();
+  });
 
   useEffect(() => {
     const intervalId = window.setInterval(() => {
@@ -120,8 +128,36 @@ export default function StaffDashboard() {
           <div className="page-header">
             <h2>Scheduled Appointments</h2>
           </div>
+          <div className="card" style={{ marginBottom: '1.5rem' }}>
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                gap: '1rem',
+                flexWrap: 'wrap',
+              }}
+            >
+              <div>
+                <div className="patient-panel__eyebrow">Appointments Overview</div>
+                <h3 style={{ margin: '0.25rem 0 0.35rem' }}>Upcoming Appointments</h3>
+                <p className="text-muted" style={{ marginBottom: 0 }}>
+                  You currently have <strong>{upcomingAppointments.length}</strong> upcoming appointment{upcomingAppointments.length === 1 ? '' : 's'}.
+                </p>
+              </div>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => appointmentListRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+              >
+                Open Appointments
+              </button>
+            </div>
+          </div>
           <AvailabilityManager onChanged={load} />
-          <AppointmentList appointments={appointments} onUpdate={load} staffView />
+          <div ref={appointmentListRef}>
+            <AppointmentList appointments={appointments} onUpdate={load} staffView />
+          </div>
         </>
       )}
 
